@@ -54,19 +54,19 @@ position: fixed; inset: 0; z-index: 1000; display: none; pointer-events: none;
 }
 #burger-menu.open { display: block; pointer-events: all; }
 #burger-overlay {
-position: absolute; inset: 0; background: rgba(0,0,0,0.35);
-backdrop-filter: blur(2px);
+position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+z-index: 1000;
 }
 #burger-panel {
-position: absolute; top: 0; right: 0; width: 270px; height: 100%;
+position: fixed; top: 0; right: -270px; width: 270px; height: 100%;
 background: var(–surface); box-shadow: -6px 0 32px rgba(0,0,0,0.15);
 display: flex; flex-direction: column;
-padding-top: env(safe-area-inset-top, 44px);
-padding-bottom: env(safe-area-inset-bottom, 24px);
-transform: translateX(100%);
-transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+padding-top: 50px;
+padding-bottom: 24px;
+transition: right 0.28s cubic-bezier(0.4,0,0.2,1);
+z-index: 1001;
 }
-#burger-menu.open #burger-panel { transform: translateX(0); }
+#burger-menu.open #burger-panel { right: 0; }
 .burger-panel-header {
 padding: 20px 20px 16px;
 border-bottom: 1px solid var(–border);
@@ -563,6 +563,8 @@ function parseXlsx(buffer) {
 
     S.data = data;
     S.syncTime = new Date().toLocaleString('fr-CH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    localStorage.removeItem('budget_data');
+    localStorage.removeItem('budget_sync_time');
     localStorage.setItem('budget_data', JSON.stringify(data));
     localStorage.setItem('budget_sync_time', S.syncTime);
     document.getElementById('burger-cache-btn').style.display = 'flex';
