@@ -271,7 +271,7 @@ font-size: 15px; font-weight: 600; box-shadow: 0 6px 20px rgba(94,79,214,0.28);
 
 <div id="app">
   <!-- IMPORT SCREEN (shown when no data) -->
-  <div id="screen-import" class="screen active">
+  <div id="screen-import" class="screen">
     <div class="import-logo">💰</div>
     <div class="import-title">Budget Tracker</div>
     <p class="import-sub">Importe ton fichier Excel depuis iCloud Drive pour accéder à ton budget.</p>
@@ -476,6 +476,8 @@ window.addEventListener('load', () => {
       return;
     } catch(e) {}
   }
+  // No cache — show import screen
+  document.getElementById('screen-import').classList.add('active');
   hideLoading();
 });
 
@@ -512,7 +514,7 @@ function parseXlsx(buffer) {
         const type   = String(r['Type'] || '');
         const cat    = r['Catégorie'] || '';
         const amt    = parseFloat(r['Montant (CHF)'] || 0);
-        if (!desc && !amt) return;
+        if (!desc || !amt) return;
         data.transactions.push({ desc, mois, compte, type, cat, amt });
       });
     }
@@ -576,7 +578,14 @@ function parseXlsx(buffer) {
 function initApp() {
   const monthSet = new Set();
   (S.data.transactions || []).forEach(t => { if (t.mois) monthSet.add(t.mois); });
-  S.months = [...monthSet].sort((a,b) => MONTHS_FR.indexOf(a) - MONTHS_FR.indexOf(b));
+  // Sort months: extract base month name for sorting, handle "Décembre 25" style
+  S.months = [...monthSet].sort((a,b) => {
+    const ai = MONTHS_FR.findIndex(m => a.startsWith(m));
+    const bi = MONTHS_FR.findIndex(m => b.startsWith(m));
+    // If same month name, sort by year suffix
+    if (ai === bi) return a.localeCompare(b);
+    return (ai===-1?99:ai) - (bi===-1?99:bi);
+  });
   if (!S.months.length) S.months = [MONTHS_FR[new Date().getMonth()]];
   S.monthIdx = S.months.length - 1;
 
@@ -585,8 +594,10 @@ function initApp() {
   S.allCats = [...catSet];
   S.selectedCats = new Set(S.allCats);
 
-  // Hide import screen, show main app
-  document.getElementById('screen-import').classList.remove('active');
+  // Hide import screen completely, show main app
+  const importEl = document.getElementById('screen-import');
+  importEl.classList.remove('active');
+  importEl.style.display = 'none';
   document.getElementById('screen-budget').classList.add('active');
   document.getElementById('tabbar').style.display = 'flex';
   document.getElementById('burger-sync-label').textContent = 'Sync : ' + S.syncTime;
