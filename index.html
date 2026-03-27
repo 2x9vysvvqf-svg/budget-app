@@ -1,1 +1,814 @@
-
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Budget">
+<title>Budget Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; background: #f5f5f7;
+  font-family: -apple-system, 'Helvetica Neue', sans-serif;
+  overflow: hidden; position: fixed; width: 100%;
+  color: #1a1a2e;
+}
+:root {
+  --bg: #f5f5f7; --surface: #fff; --card: #fff; --card-alt: #f9f9fb;
+  --border: #e5e5ea; --accent: #5e4fd6; --accent-light: rgba(94,79,214,0.09);
+  --green: #1a9e6a; --green-bg: #edfaf4; --green-light: rgba(26,158,106,0.10);
+  --red: #e03131; --red-bg: #fff0f0; --red-light: rgba(224,49,49,0.09);
+  --amber: #c47d0a; --amber-bg: #fff8eb;
+  --text: #1a1a2e; --muted: #8e8ea8; --tab-h: 70px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+#app { height: 100%; display: flex; flex-direction: column; }
+ 
+/* ── SCREENS ── */
+.screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.screen.active { display: flex; }
+ 
+/* ── HEADER ── */
+.header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 12px 18px; display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+.header-title { font-size: 22px; font-weight: 700; color: var(--text); }
+.header-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.sync-btn {
+  background: var(--accent-light); border: none; border-radius: 9px;
+  padding: 6px 11px; color: var(--accent); font-size: 12px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: 4px;
+}
+ 
+/* ── SCROLL AREA ── */
+.scroll { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
+ 
+/* ── TAB BAR ── */
+#tabbar {
+  background: var(--surface); border-top: 1px solid var(--border);
+  display: flex; padding: 6px 0; padding-bottom: calc(6px + var(--safe-bottom));
+  flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1; background: none; border: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0;
+}
+.tab-btn .tab-icon { font-size: 22px; line-height: 1; }
+.tab-btn .tab-label { font-size: 10px; font-weight: 400; color: var(--muted); }
+.tab-btn.active .tab-label { color: var(--accent); font-weight: 700; }
+.tab-indicator { width: 36px; height: 2px; background: var(--accent); border-radius: 1px; margin-bottom: 2px; }
+.tab-btn:not(.active) .tab-indicator { visibility: hidden; }
+ 
+/* ── CARDS ── */
+.card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.kpi-grid { display: flex; gap: 8px; }
+.kpi-card { flex: 1; border-radius: 14px; border: 1px solid var(--border); padding: 12px 10px; }
+.kpi-label { font-size: 10px; color: var(--muted); font-weight: 500; margin-bottom: 6px; }
+.kpi-val { font-size: 13px; font-weight: 700; letter-spacing: -0.3px; }
+ 
+/* ── MONTH SELECTOR ── */
+.month-sel { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.month-arrow { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; width: 34px; height: 34px; font-size: 16px; color: var(--text); cursor: pointer; }
+.month-label { font-size: 15px; font-weight: 700; color: var(--text); width: 100px; text-align: center; }
+ 
+/* ── SECTION LABEL ── */
+.section-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.4px; text-transform: uppercase; }
+ 
+/* ── FILTER ── */
+.filter-bar { display: flex; align-items: center; justify-content: space-between; }
+.filter-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 5px 10px; cursor: pointer;
+  font-size: 11px; font-weight: 600; color: var(--muted);
+}
+.filter-btn.open { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+.filter-badge { background: var(--accent); color: #fff; border-radius: 6px; font-size: 9px; font-weight: 700; padding: 1px 5px; }
+.filter-panel { background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 12px 14px; display: none; flex-direction: column; gap: 10px; }
+.filter-panel.open { display: flex; }
+.filter-panel-header { display: flex; justify-content: space-between; align-items: center; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  padding: 5px 11px; border-radius: 20px; cursor: pointer; font-size: 11px; font-weight: 500;
+  background: var(--card-alt); border: 1.5px solid var(--border); color: var(--muted);
+}
+.chip.on { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+.chip-all-btn { background: none; border: none; color: var(--accent); font-size: 11px; font-weight: 600; cursor: pointer; }
+ 
+/* ── CAT ROW ── */
+.cat-row { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 12px 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.cat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.cat-left { display: flex; align-items: center; gap: 8px; }
+.cat-dot-wrap { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.cat-dot { width: 8px; height: 8px; border-radius: 2px; }
+.cat-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.cat-amt { font-size: 13px; font-weight: 700; color: var(--red); }
+.progress-bg { height: 4px; background: var(--border); border-radius: 2px; }
+.progress-fill { height: 4px; border-radius: 2px; }
+ 
+/* ── ACCOUNTS ── */
+.total-banner {
+  background: linear-gradient(135deg, #5e4fd6, #4238b0);
+  border-radius: 18px; padding: 18px 20px;
+  box-shadow: 0 6px 24px rgba(94,79,214,0.22);
+}
+.total-banner .lbl { font-size: 11px; color: rgba(255,255,255,0.7); font-weight: 600; letter-spacing: 0.5px; margin-bottom: 4px; }
+.total-banner .val { font-size: 30px; font-weight: 700; color: #fff; letter-spacing: -1px; }
+.total-banner .sub { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+.account-card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 12px; }
+.acc-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.acc-info { flex: 1; }
+.acc-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.acc-type { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.acc-balance { font-size: 15px; font-weight: 700; }
+ 
+/* ── TO DO ── */
+.todo-badge { background: var(--red); color: #fff; border-radius: 10px; padding: 3px 10px; font-size: 12px; font-weight: 700; }
+.todo-card { background: var(--card); border-radius: 14px; border: 1px solid var(--border); padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.todo-card.urgent { background: #fff5f5; border-color: rgba(224,49,49,0.2); }
+.todo-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.todo-title { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.urgent-badge { background: var(--red-bg); color: var(--red); font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
+.todo-compte { font-size: 11px; color: var(--muted); margin: 4px 0 7px; }
+.todo-cat-pill { background: var(--card-alt); border-radius: 7px; padding: 2px 9px; display: inline-block; font-size: 10px; color: var(--muted); border: 1px solid var(--border); }
+.todo-right { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex-shrink: 0; }
+.todo-amt { font-size: 15px; font-weight: 700; color: var(--red); }
+.paid-btn { background: var(--green-bg); border: 1px solid var(--green); border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--green); }
+.divider-row { display: flex; align-items: center; gap: 10px; }
+.divider-line { flex: 1; height: 1px; background: var(--border); }
+.divider-txt { font-size: 11px; color: var(--muted); font-weight: 500; }
+.done-card { background: var(--card-alt); border-radius: 14px; border: 1px solid var(--border); border-left: 3.5px solid var(--green); padding: 13px 16px; display: flex; justify-content: space-between; align-items: center; opacity: 0.7; }
+.done-title { font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: line-through; }
+.done-compte { font-size: 11px; color: #aaa; margin-top: 2px; }
+.done-amt { font-size: 13px; font-weight: 600; color: var(--green); }
+.all-done { text-align: center; padding: 28px 0; color: var(--green); font-size: 14px; font-weight: 600; }
+ 
+/* ── CONNEXION SCREEN ── */
+#screen-login {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 36px 28px; gap: 22px; background: var(--bg);
+}
+.login-logo { width: 84px; height: 84px; border-radius: 24px; background: linear-gradient(135deg,#0078d4,#005a9e); display: flex; align-items: center; justify-content: center; font-size: 40px; box-shadow: 0 12px 36px rgba(0,120,212,0.28); }
+.login-title { font-size: 23px; font-weight: 700; color: var(--text); text-align: center; }
+.login-sub { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.6; }
+.ms-btn { width: 100%; padding: 16px; border-radius: 14px; border: none; cursor: pointer; background: linear-gradient(135deg,#0078d4,#005a9e); color: #fff; font-size: 15px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,120,212,0.25); display: flex; align-items: center; justify-content: center; gap: 8px; }
+.or-row { display: flex; align-items: center; gap: 12px; width: 100%; }
+.or-line { flex: 1; height: 1px; background: var(--border); }
+.or-txt { font-size: 11px; color: var(--muted); }
+.manual-btn { width: 100%; padding: 14px; border-radius: 14px; border: 1.5px solid var(--border); cursor: pointer; background: var(--surface); color: var(--muted); font-size: 14px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.security-note { display: flex; align-items: flex-start; gap: 10px; background: var(--surface); border-radius: 12px; padding: 12px 14px; border: 1px solid var(--border); width: 100%; }
+.security-note span:first-child { font-size: 16px; margin-top: 1px; }
+.security-note p { font-size: 11px; color: var(--muted); line-height: 1.5; }
+ 
+/* ── LOADING ── */
+#loading { position: fixed; inset: 0; background: rgba(255,255,255,0.85); display: flex; align-items: center; justify-content: center; z-index: 999; flex-direction: column; gap: 12px; }
+.spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { font-size: 13px; color: var(--muted); font-weight: 500; }
+#loading.hidden { display: none; }
+ 
+/* ── EMPTY STATE ── */
+.empty { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 13px; }
+.empty .ico { font-size: 36px; margin-bottom: 10px; }
+ 
+/* ── FILE INPUT ── */
+#file-input { display: none; }
+</style>
+</head>
+<body>
+ 
+<div id="loading"><div class="spinner"></div><p id="loading-msg">Chargement…</p></div>
+<input type="file" id="file-input" accept=".xlsm,.xlsx">
+ 
+<div id="app">
+ 
+  <!-- LOGIN -->
+  <div id="screen-login" class="screen active">
+    <div class="login-logo">☁️</div>
+    <div>
+      <div class="login-title">Budget Tracker</div>
+      <p class="login-sub">Connecte ton OneDrive pour synchroniser ton fichier Excel automatiquement.</p>
+    </div>
+    <button class="ms-btn" onclick="loginOneDrive()">🔗&nbsp; Connexion avec Microsoft</button>
+    <div class="or-row"><div class="or-line"></div><span class="or-txt">ou</span><div class="or-line"></div></div>
+    <button class="manual-btn" onclick="document.getElementById('file-input').click()">📁&nbsp; Importer le fichier manuellement</button>
+    <div class="security-note">
+      <span>🔒</span>
+      <p>Authentification Microsoft sécurisée. Aucune donnée ne transite par nos serveurs. Le fichier est lu localement sur ton appareil.</p>
+    </div>
+  </div>
+ 
+  <!-- RÉSUMÉ -->
+  <div id="screen-resume" class="screen">
+    <div class="header">
+      <div>
+        <div class="header-title">Budget</div>
+        <div class="header-sub" id="sync-time">–</div>
+      </div>
+      <button class="sync-btn" onclick="syncOneDrive()">↻ Sync</button>
+    </div>
+    <div class="scroll" id="scroll-resume">
+      <div class="month-sel">
+        <button class="month-arrow" onclick="changeMonth(-1)">‹</button>
+        <div class="month-label" id="month-label">–</div>
+        <button class="month-arrow" onclick="changeMonth(1)">›</button>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card" style="background:var(--green-bg)">
+          <div class="kpi-label">Revenus</div>
+          <div class="kpi-val" id="kpi-income" style="color:var(--green)">CHF –</div>
+        </div>
+        <div class="kpi-card" style="background:var(--red-bg)">
+          <div class="kpi-label">Dépenses</div>
+          <div class="kpi-val" id="kpi-expense" style="color:var(--red)">CHF –</div>
+        </div>
+        <div class="kpi-card" style="background:var(--card-alt)">
+          <div class="kpi-label">Solde net</div>
+          <div class="kpi-val" id="kpi-net" style="color:var(--text)">CHF –</div>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <div class="section-label">Par catégorie</div>
+        <button class="filter-btn" id="filter-btn" onclick="toggleFilter()">🎛️ Filtrer <span class="filter-badge" id="filter-badge" style="display:none"></span></button>
+      </div>
+      <div class="filter-panel" id="filter-panel">
+        <div class="filter-panel-header">
+          <span style="font-size:11px;font-weight:700;color:var(--text)">Catégories</span>
+          <button class="chip-all-btn" onclick="selectAllCats()">Tout sélectionner</button>
+        </div>
+        <div class="filter-chips" id="filter-chips"></div>
+      </div>
+      <div id="cat-list"></div>
+    </div>
+  </div>
+ 
+  <!-- COMPTES -->
+  <div id="screen-comptes" class="screen">
+    <div class="header">
+      <div>
+        <div class="header-title">Comptes</div>
+        <div class="header-sub" id="acc-count">–</div>
+      </div>
+    </div>
+    <div class="scroll">
+      <div class="total-banner">
+        <div class="lbl">TOTAL CONSOLIDÉ</div>
+        <div class="val" id="total-balance">CHF –</div>
+        <div class="sub">Transferts internes exclus</div>
+      </div>
+      <div class="section-label">DÉTAIL PAR COMPTE</div>
+      <div id="account-list"></div>
+    </div>
+  </div>
+ 
+  <!-- TO DO -->
+  <div id="screen-todo" class="screen">
+    <div class="header">
+      <div>
+        <div class="header-title">To Do</div>
+        <div class="header-sub" id="todo-month-label">–</div>
+      </div>
+      <div class="todo-badge" id="todo-count" style="display:none">0</div>
+    </div>
+    <div class="scroll" id="todo-scroll">
+      <div class="section-label" id="todo-section-label">EN ATTENTE</div>
+      <div id="todo-pending-list"></div>
+      <div class="divider-row" id="todo-divider" style="display:none">
+        <div class="divider-line"></div><span class="divider-txt">Déjà payés</span><div class="divider-line"></div>
+      </div>
+      <div id="todo-done-list"></div>
+    </div>
+  </div>
+ 
+  <!-- TAB BAR -->
+  <div id="tabbar">
+    <button class="tab-btn active" onclick="switchTab(0)">
+      <div class="tab-indicator"></div>
+      <span class="tab-icon">📊</span>
+      <span class="tab-label">Résumé</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab(1)">
+      <div class="tab-indicator"></div>
+      <span class="tab-icon">🏦</span>
+      <span class="tab-label">Comptes</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab(2)">
+      <div class="tab-indicator"></div>
+      <span class="tab-icon">✅</span>
+      <span class="tab-label">To Do</span>
+    </button>
+  </div>
+</div>
+ 
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const CLIENT_ID = '9188040d-6c67-4c5b-b112-36a304b66dad'; // Microsoft public client
+const REDIRECT  = window.location.origin + window.location.pathname;
+const SCOPES    = 'Files.Read User.Read';
+const FILENAME  = 'Budget_Tracker_VBA.xlsm'; // nom exact du fichier dans OneDrive
+ 
+const MONTHS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const CAT_COLORS = {
+  "Garde d'enfants": { col:'#c47d0a', bg:'#fff8eb' },
+  'Loyer':           { col:'#5e4fd6', bg:'rgba(94,79,214,0.08)' },
+  'Courses':         { col:'#e03131', bg:'#fff0f0' },
+  'Restaurant':      { col:'#1a9e6a', bg:'#edfaf4' },
+  'Transport':       { col:'#7b7b9a', bg:'#f2f2f7' },
+  'Assurance':       { col:'#0078d4', bg:'#e8f4ff' },
+  'Utilities':       { col:'#9b59b6', bg:'#f5eeff' },
+};
+function catColor(name) { return CAT_COLORS[name] || { col:'#7b7b9a', bg:'#f2f2f7' }; }
+ 
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let state = {
+  token: null,
+  data: null,          // parsed workbook data
+  currentMonthIdx: 0,  // index into available months
+  availableMonths: [],
+  selectedCats: new Set(),
+  allCats: [],
+  localDone: new Set(), // locally marked as paid (session only)
+  syncTime: null,
+};
+ 
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  // Check for OAuth callback
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  const token = hash.get('access_token');
+  if (token) {
+    window.history.replaceState({}, '', window.location.pathname);
+    state.token = token;
+    localStorage.setItem('ms_token', token);
+    localStorage.setItem('ms_token_ts', Date.now());
+    showLoading('Connexion à OneDrive…');
+    fetchFileFromOneDrive(token);
+    return;
+  }
+  // Check cached token
+  const cachedToken = localStorage.getItem('ms_token');
+  const cachedTs    = parseInt(localStorage.getItem('ms_token_ts') || '0');
+  const tokenValid  = cachedToken && (Date.now() - cachedTs < 55 * 60 * 1000); // 55min
+  // Check cached data
+  const cachedData = localStorage.getItem('budget_data');
+  if (cachedData) {
+    try {
+      state.data = JSON.parse(cachedData);
+      state.syncTime = localStorage.getItem('budget_sync_time');
+      state.token = tokenValid ? cachedToken : null;
+      initApp();
+      return;
+    } catch(e) {}
+  }
+  hideLoading();
+});
+ 
+// ═══════════════════════════════════════════════════════════
+// ONEDRIVE AUTH (implicit flow — no server needed)
+// ═══════════════════════════════════════════════════════════
+function loginOneDrive() {
+  const url = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize`
+    + `?client_id=${CLIENT_ID}`
+    + `&response_type=token`
+    + `&redirect_uri=${encodeURIComponent(REDIRECT)}`
+    + `&scope=${encodeURIComponent(SCOPES)}`
+    + `&response_mode=fragment`;
+  window.location.href = url;
+}
+ 
+async function fetchFileFromOneDrive(token) {
+  try {
+    showLoading('Recherche du fichier…');
+    // Search for the file by name
+    const searchRes = await fetch(
+      `https://graph.microsoft.com/v1.0/me/drive/root/search(q='${encodeURIComponent(FILENAME)}')`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const searchData = await searchRes.json();
+    if (!searchData.value || searchData.value.length === 0) {
+      alert(`Fichier "${FILENAME}" introuvable sur OneDrive. Assure-toi qu'il est bien dans ton OneDrive personnel.`);
+      hideLoading(); return;
+    }
+    const file = searchData.value[0];
+    showLoading('Téléchargement du fichier…');
+    const fileRes = await fetch(file['@microsoft.graph.downloadUrl'] || `https://graph.microsoft.com/v1.0/me/drive/items/${file.id}/content`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const blob = await fileRes.arrayBuffer();
+    showLoading('Lecture des données…');
+    parseXlsx(blob);
+  } catch(e) {
+    alert('Erreur de connexion OneDrive : ' + e.message);
+    hideLoading();
+  }
+}
+ 
+function syncOneDrive() {
+  const token = localStorage.getItem('ms_token');
+  const ts    = parseInt(localStorage.getItem('ms_token_ts') || '0');
+  if (token && Date.now() - ts < 55 * 60 * 1000) {
+    showLoading('Synchronisation…');
+    fetchFileFromOneDrive(token);
+  } else {
+    loginOneDrive();
+  }
+}
+ 
+// ═══════════════════════════════════════════════════════════
+// MANUAL FILE IMPORT
+// ═══════════════════════════════════════════════════════════
+document.getElementById('file-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  showLoading('Lecture du fichier…');
+  const reader = new FileReader();
+  reader.onload = (ev) => parseXlsx(ev.target.result);
+  reader.readAsArrayBuffer(file);
+});
+ 
+// ═══════════════════════════════════════════════════════════
+// PARSE XLSX
+// ═══════════════════════════════════════════════════════════
+function parseXlsx(buffer) {
+  try {
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+    const data = { transactions: [], comptes: [], todo: [], transferts: [] };
+ 
+    // TRANSACTIONS
+    const txSheet = wb.Sheets['Transactions'];
+    if (txSheet) {
+      const rows = XLSX.utils.sheet_to_json(txSheet, { defval: '' });
+      rows.forEach(r => {
+        const date = r['Date'] || r['date'];
+        const mois = r['Mois à prendre en compte'] || r['Month'] || '';
+        const desc = r['Description / Source'] || '';
+        const compte = r['Compte'] || '';
+        const type = r['Type'] || '';
+        const cat = r['Catégorie'] || '';
+        const amt = parseFloat(r['Montant (CHF)'] || 0);
+        const paiement = String(r['Paiement à effectuer ?'] || '').toLowerCase();
+        const budget = String(r['Budget / Actual'] || '').toLowerCase();
+        if (!desc && !amt) return;
+        data.transactions.push({ date, mois, desc, compte, type, cat, amt, paiement, budget, raw: r });
+      });
+    }
+ 
+    // COMPTES
+    const accSheet = wb.Sheets['Comptes'];
+    if (accSheet) {
+      const rows = XLSX.utils.sheet_to_json(accSheet, { defval: '' });
+      rows.forEach(r => {
+        const name = r['Nom du compte'] || '';
+        const type = r['Type de compte'] || '';
+        const soldeOuv = parseFloat(r["Solde d'ouverture"] || 0);
+        const revTotal = parseFloat(r['Total Revenus'] || 0);
+        const depTotal = parseFloat(r['Total Dépenses'] || 0);
+        const trRecus  = parseFloat(r['Transferts Reçus'] || 0);
+        const trEnvoy  = parseFloat(r['Transferts Envoyés'] || 0);
+        const balance  = parseFloat(r['Balance actuelle'] || (soldeOuv + revTotal - depTotal + trRecus - trEnvoy));
+        if (!name) return;
+        data.comptes.push({ name, type, soldeOuv, revTotal, depTotal, trRecus, trEnvoy, balance });
+      });
+    }
+ 
+    // TO DO
+    const todoSheet = wb.Sheets['To Do'];
+    if (todoSheet) {
+      const rows = XLSX.utils.sheet_to_json(todoSheet, { defval: '', range: 1 });
+      rows.forEach(r => {
+        const mois = r['Mois'] || '';
+        const desc = r['Description / Source'] || '';
+        const compte = r['Compte'] || '';
+        const type = r['Type'] || '';
+        const cat = r['Catégorie'] || '';
+        const amt = parseFloat(r['Montant (CHF)'] || 0);
+        const fait = String(r['Fait ?'] || '').toLowerCase();
+        if (!desc && !amt) return;
+        data.todo.push({ mois, desc, compte, type, cat, amt, fait });
+      });
+    }
+ 
+    // Cache
+    state.data = data;
+    state.syncTime = new Date().toLocaleString('fr-CH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    localStorage.setItem('budget_data', JSON.stringify(data));
+    localStorage.setItem('budget_sync_time', state.syncTime);
+ 
+    initApp();
+  } catch(e) {
+    console.error(e);
+    alert('Erreur de lecture du fichier : ' + e.message);
+    hideLoading();
+  }
+}
+ 
+// ═══════════════════════════════════════════════════════════
+// INIT APP
+// ═══════════════════════════════════════════════════════════
+function initApp() {
+  // Compute available months from transactions
+  const monthSet = new Set();
+  (state.data.transactions || []).forEach(t => {
+    if (t.mois) monthSet.add(t.mois);
+  });
+  // Sort months
+  const monthOrder = MONTHS_FR;
+  state.availableMonths = [...monthSet].sort((a, b) => {
+    const ai = monthOrder.indexOf(a.trim());
+    const bi = monthOrder.indexOf(b.trim());
+    return ai - bi;
+  });
+  if (state.availableMonths.length === 0) state.availableMonths = [MONTHS_FR[new Date().getMonth()]];
+  // Default to last month
+  state.currentMonthIdx = state.availableMonths.length - 1;
+ 
+  // Categories
+  const catSet = new Set();
+  (state.data.transactions || []).forEach(t => { if (t.cat && t.type === 'Expense') catSet.add(t.cat); });
+  state.allCats = [...catSet];
+  state.selectedCats = new Set(state.allCats);
+ 
+  showMainApp();
+  switchTab(0);
+  hideLoading();
+}
+ 
+// ═══════════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════════
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || 'Chargement…';
+  document.getElementById('loading').classList.remove('hidden');
+}
+function hideLoading() { document.getElementById('loading').classList.add('hidden'); }
+ 
+function showMainApp() {
+  document.getElementById('screen-login').classList.remove('active');
+  document.getElementById('screen-resume').classList.add('active');
+  document.getElementById('tabbar').style.display = 'flex';
+}
+ 
+function switchTab(idx) {
+  const tabs = document.querySelectorAll('.tab-btn');
+  tabs.forEach((t, i) => t.classList.toggle('active', i === idx));
+  const screens = ['screen-resume', 'screen-comptes', 'screen-todo'];
+  screens.forEach((s, i) => {
+    const el = document.getElementById(s);
+    if (i === idx) el.classList.add('active');
+    else el.classList.remove('active');
+  });
+  if (idx === 0) renderResume();
+  if (idx === 1) renderComptes();
+  if (idx === 2) renderTodo();
+}
+ 
+// ═══════════════════════════════════════════════════════════
+// MONTH NAVIGATION
+// ═══════════════════════════════════════════════════════════
+function changeMonth(dir) {
+  state.currentMonthIdx = Math.max(0, Math.min(state.availableMonths.length - 1, state.currentMonthIdx + dir));
+  renderResume();
+}
+ 
+function currentMonth() { return state.availableMonths[state.currentMonthIdx] || ''; }
+ 
+// ═══════════════════════════════════════════════════════════
+// RENDER RÉSUMÉ
+// ═══════════════════════════════════════════════════════════
+function renderResume() {
+  const mois = currentMonth();
+  document.getElementById('month-label').textContent = mois + ' 2026';
+  document.getElementById('sync-time').textContent = state.syncTime ? 'Sync : ' + state.syncTime : '–';
+ 
+  const txns = (state.data.transactions || []).filter(t => t.mois === mois && t.budget === 'actual');
+ 
+  let totalIncome = 0, totalExpense = 0;
+  const catTotals = {};
+  txns.forEach(t => {
+    if (t.type === 'Income') totalIncome += t.amt;
+    if (t.type === 'Expense') {
+      totalExpense += t.amt;
+      catTotals[t.cat] = (catTotals[t.cat] || 0) + t.amt;
+    }
+  });
+ 
+  const net = totalIncome - totalExpense;
+  document.getElementById('kpi-income').textContent  = 'CHF ' + fmt(totalIncome);
+  document.getElementById('kpi-expense').textContent = 'CHF ' + fmt(totalExpense);
+  document.getElementById('kpi-net').textContent     = 'CHF ' + fmt(net);
+  document.getElementById('kpi-net').style.color     = net >= 0 ? 'var(--green)' : 'var(--red)';
+ 
+  renderFilterChips();
+  renderCatList(catTotals, totalExpense);
+}
+ 
+function renderFilterChips() {
+  const container = document.getElementById('filter-chips');
+  container.innerHTML = '';
+  state.allCats.forEach(cat => {
+    const on = state.selectedCats.has(cat);
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (on ? ' on' : '');
+    chip.textContent = (on ? '✓ ' : '') + cat;
+    chip.onclick = () => toggleCat(cat);
+    container.appendChild(chip);
+  });
+  // badge
+  const badge = document.getElementById('filter-badge');
+  if (state.selectedCats.size < state.allCats.length) {
+    badge.textContent = state.selectedCats.size;
+    badge.style.display = 'inline';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+ 
+function renderCatList(catTotals, totalExpense) {
+  const container = document.getElementById('cat-list');
+  container.innerHTML = '';
+  const entries = Object.entries(catTotals)
+    .filter(([cat]) => state.selectedCats.has(cat))
+    .sort((a, b) => b[1] - a[1]);
+ 
+  if (entries.length === 0) {
+    container.innerHTML = '<div class="empty"><div class="ico">📭</div>Aucune dépense pour ce mois</div>';
+    return;
+  }
+  const maxAmt = entries[0][1];
+  entries.forEach(([cat, amt]) => {
+    const { col, bg } = catColor(cat);
+    const pct = maxAmt > 0 ? amt / maxAmt : 0;
+    const div = document.createElement('div');
+    div.className = 'cat-row';
+    div.innerHTML = `
+      <div class="cat-top">
+        <div class="cat-left">
+          <div class="cat-dot-wrap" style="background:${bg}"><div class="cat-dot" style="background:${col}"></div></div>
+          <span class="cat-name">${cat}</span>
+        </div>
+        <span class="cat-amt">–${fmt(amt)}</span>
+      </div>
+      <div class="progress-bg"><div class="progress-fill" style="width:${(pct*100).toFixed(1)}%;background:${col}"></div></div>
+    `;
+    container.appendChild(div);
+  });
+}
+ 
+function toggleFilter() {
+  const btn = document.getElementById('filter-btn');
+  const panel = document.getElementById('filter-panel');
+  btn.classList.toggle('open');
+  panel.classList.toggle('open');
+}
+ 
+function toggleCat(cat) {
+  if (state.selectedCats.has(cat)) {
+    if (state.selectedCats.size > 1) state.selectedCats.delete(cat);
+  } else {
+    state.selectedCats.add(cat);
+  }
+  renderFilterChips();
+  const mois = currentMonth();
+  const txns = (state.data.transactions || []).filter(t => t.mois === mois && t.budget === 'actual');
+  let totalExpense = 0;
+  const catTotals = {};
+  txns.forEach(t => {
+    if (t.type === 'Expense') { totalExpense += t.amt; catTotals[t.cat] = (catTotals[t.cat] || 0) + t.amt; }
+  });
+  renderCatList(catTotals, totalExpense);
+}
+ 
+function selectAllCats() {
+  state.selectedCats = new Set(state.allCats);
+  renderResume();
+}
+ 
+// ═══════════════════════════════════════════════════════════
+// RENDER COMPTES
+// ═══════════════════════════════════════════════════════════
+function renderComptes() {
+  const comptes = state.data.comptes || [];
+  document.getElementById('acc-count').textContent = comptes.length + ' compte' + (comptes.length > 1 ? 's' : '') + ' actifs';
+ 
+  let total = 0;
+  comptes.forEach(c => { total += c.balance || 0; });
+  document.getElementById('total-balance').textContent = 'CHF ' + fmt(total);
+ 
+  const list = document.getElementById('account-list');
+  list.innerHTML = '';
+  if (comptes.length === 0) { list.innerHTML = '<div class="empty"><div class="ico">🏦</div>Aucun compte trouvé</div>'; return; }
+ 
+  comptes.forEach(c => {
+    const pos = c.balance >= 0;
+    const col = pos ? 'var(--green)' : 'var(--red)';
+    const bg  = pos ? 'var(--green-bg)' : 'var(--red-bg)';
+    const icon = c.type && c.type.toLowerCase().includes('épargne') ? '💰' : '💳';
+    const borderCol = pos ? 'var(--green)' : 'var(--red)';
+    const div = document.createElement('div');
+    div.className = 'account-card';
+    div.style.borderLeft = `3.5px solid ${borderCol}`;
+    div.innerHTML = `
+      <div class="acc-icon" style="background:${bg}">${icon}</div>
+      <div class="acc-info">
+        <div class="acc-name">${c.name}</div>
+        <div class="acc-type">${c.type}</div>
+      </div>
+      <div class="acc-balance" style="color:${col}">CHF ${c.balance >= 0 ? '+' : ''}${fmt(c.balance)}</div>
+    `;
+    list.appendChild(div);
+  });
+}
+ 
+// ═══════════════════════════════════════════════════════════
+// RENDER TO DO
+// ═══════════════════════════════════════════════════════════
+function renderTodo() {
+  const todos = state.data.todo || [];
+  const mois = currentMonth();
+  document.getElementById('todo-month-label').textContent = mois + ' 2026';
+ 
+  // Filter to current month + non-fait
+  const pending = todos.filter(t => t.fait === 'non' && !state.localDone.has(t.desc + t.amt));
+  const done    = todos.filter(t => t.fait === 'oui' || state.localDone.has(t.desc + t.amt));
+ 
+  const count = document.getElementById('todo-count');
+  if (pending.length > 0) { count.textContent = pending.length; count.style.display = 'block'; }
+  else count.style.display = 'none';
+ 
+  const pendingList = document.getElementById('todo-pending-list');
+  pendingList.innerHTML = '';
+ 
+  if (pending.length === 0) {
+    pendingList.innerHTML = '<div class="all-done">✅ Tout est à jour !</div>';
+  } else {
+    pending.forEach(t => {
+      const urgent = t.amt > 1000;
+      const div = document.createElement('div');
+      div.className = 'todo-card' + (urgent ? ' urgent' : '');
+      div.style.borderLeft = `3.5px solid ${urgent ? 'var(--red)' : 'var(--border)'}`;
+      div.innerHTML = `
+        <div class="todo-top">
+          <div>
+            <div class="todo-title">${t.desc}${urgent ? '<span class="urgent-badge">⚠️ URGENT</span>' : ''}</div>
+            <div class="todo-compte">🏦 ${t.compte}</div>
+            <span class="todo-cat-pill">${t.cat}</span>
+          </div>
+          <div class="todo-right">
+            <div class="todo-amt">–CHF ${fmt(t.amt)}</div>
+            <button class="paid-btn" onclick="markPaid('${t.desc}','${t.amt}')">✓ Payé</button>
+          </div>
+        </div>
+      `;
+      pendingList.appendChild(div);
+    });
+  }
+ 
+  const divider = document.getElementById('todo-divider');
+  const doneList = document.getElementById('todo-done-list');
+  doneList.innerHTML = '';
+ 
+  if (done.length > 0) {
+    divider.style.display = 'flex';
+    done.forEach(t => {
+      const div = document.createElement('div');
+      div.className = 'done-card';
+      div.innerHTML = `
+        <div>
+          <div class="done-title">${t.desc}</div>
+          <div class="done-compte">🏦 ${t.compte}</div>
+        </div>
+        <div class="done-amt">✓ CHF ${fmt(t.amt)}</div>
+      `;
+      doneList.appendChild(div);
+    });
+  } else {
+    divider.style.display = 'none';
+  }
+}
+ 
+function markPaid(desc, amt) {
+  state.localDone.add(desc + amt);
+  renderTodo();
+}
+ 
+// ═══════════════════════════════════════════════════════════
+// FORMAT NUMBER
+// ═══════════════════════════════════════════════════════════
+function fmt(n) {
+  return Math.abs(n).toLocaleString('fr-CH', { maximumFractionDigits: 0 });
+}
+</script>
+</body>
+</html>
